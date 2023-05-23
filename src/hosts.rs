@@ -1,8 +1,9 @@
 use crate::types::hosts::*;
 
+use publicsuffix::{List, Psl};
 
-fn public_suffix_list_algorithm(domain: String) -> String {
-    return String::new();
+lazy_static::lazy_static! {
+    static ref LIST: List = include_str!("../data/psl.dat").parse().unwrap();
 }
 
 pub fn get_public_suffix(host: Host) -> Option<String> {
@@ -11,15 +12,28 @@ pub fn get_public_suffix(host: Host) -> Option<String> {
         _ => return None,
     }
 
-    let trailing_dot: &str = match host.value.ends_with('.') {
-        true => ".",
-        false => "",
-    };
+    let public_suffix =  LIST.suffix(host.value.as_bytes())
+        .unwrap()
+        .as_bytes();
+
+    let public_suffix = String::from_utf8(public_suffix.to_vec()).unwrap();
+
+    return Some(public_suffix);
+}
 
 
-    let public_suffix: String = public_suffix_list_algorithm(host.value);
+pub fn get_registrable_domain(host: Host) -> Option<String> {
+    match host.host_type {
+        HostType::Domain => {},
+        _ => return None,
+    }
 
-    assert_eq!(public_suffix.ends_with('.'), false);
+    let domain =  LIST.domain(host.value.as_bytes());
+    if domain.is_none() {
+        return None;
+    }
 
-    return Some(public_suffix + trailing_dot);
+    let domain = String::from_utf8(domain.unwrap().as_bytes().to_vec()).unwrap();
+
+    return Some(domain);
 }
