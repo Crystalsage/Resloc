@@ -38,6 +38,7 @@ dependencies = [
 name = "resloc"
 version = "0.1.0"
 dependencies = [
+ "idna",
  "lazy_static",
  "publicsuffix",
 ]
