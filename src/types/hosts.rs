@@ -5,7 +5,7 @@ pub enum IPAddress {
 
 pub enum HostType {
     Domain,
-    IPAddress,
+    IPAddress(IPAddress),
     Opaque,
     Empty
 }
@@ -16,7 +16,7 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn new(value: &str, host_type: HostType) -> Self {
+    pub fn new(value: String, host_type: HostType) -> Self {
         Host {
             value: value.to_string(),
             host_type

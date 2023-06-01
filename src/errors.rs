@@ -16,6 +16,7 @@ impl IDNAError {
 }
 
 
+#[derive(Debug)]
 pub enum HostError {
     Ipv4Failure,
     DomainInvalidCodePoint,
