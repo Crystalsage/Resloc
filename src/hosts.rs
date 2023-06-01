@@ -4,6 +4,8 @@ use crate::domains;
 
 use publicsuffix::{List, Psl};
 
+
+
 lazy_static::lazy_static! {
     static ref LIST: List = include_str!("../data/psl.dat").parse().unwrap();
 }
@@ -89,4 +91,19 @@ pub fn host_parser(input: &str, is_not_special: bool) -> Result<Host, HostError>
 
     let result = Host::new(ascii_domain.unwrap(), HostType::Domain);
     return Ok(result);
+}
+
+
+pub fn host_serializer(host: Host) -> String {
+    match host.host_type {
+        HostType::Empty | HostType::Opaque | HostType::Domain => host.value,
+        HostType::IPAddress(IPAddress::IPv4(address)) => {
+            let result = domains::ipv4_serializer(address);
+            return result;
+        },
+        HostType::IPAddress(IPAddress::IPv6(address)) => {
+            let result = domains::ipv6_serializer(address);
+            return format!("[{}]", result);
+        },
+    }
 }

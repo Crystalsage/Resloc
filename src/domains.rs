@@ -6,6 +6,7 @@ use idna::{Config, Errors};
 type IPv4 = u32;
 type Ipv4NumberResult = Result<(u8, bool), HostError>;
 
+type Ipv6Pieces = [u16; 8];
 
 fn unicode_to_ascii(
     domain: String,
@@ -165,4 +166,25 @@ pub fn ipv4_parser(input: String) -> Result<IPv4, HostError> {
     }
 
     Ok(ipv4)
+}
+
+
+pub fn ipv4_serializer(address: u32) -> String {
+    let mut output: String = String::new();
+    let mut n = address;
+
+    for i in 1..=4 {
+        output += &(n % 256).to_string();
+        if i != 4 {
+            output += ".";
+        }
+
+        n = (n as f64 / 256_f64).floor() as u32;
+    }
+
+    return output;
+}
+
+pub fn ipv6_serializer(address: Ipv6Pieces) -> String {
+    todo!();
 }
