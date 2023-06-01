@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug)]
 pub enum IDNAError {
     DomainToAscii,
@@ -15,6 +17,7 @@ impl IDNAError {
 
 
 pub enum HostError {
+    Ipv4Failure,
     DomainInvalidCodePoint,
     HostInvalidCodePoint,
     Ipv4EmptyPart,
@@ -36,6 +39,7 @@ pub enum HostError {
 impl HostError {
     fn should_fail(self: Self) -> bool {
         match self {
+            Self::Ipv4Failure => true,
             Self::DomainInvalidCodePoint => true,
             Self::HostInvalidCodePoint => true,
             Self::Ipv4EmptyPart => false,
@@ -52,6 +56,30 @@ impl HostError {
             Self::Ipv4InIpv6InvalidCodePoint => true,
             Self::Ipv4InIpv6OutOfRangePart => true,
             Self::Ipv4InIpv6TooFewParts => true,
+        }
+    }
+}
+
+impl fmt::Display for HostError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // Self::DomainInvalidCodePoint => true,
+            // Self::HostInvalidCodePoint => true,
+            Self::Ipv4EmptyPart => write!(f, "IPv4 address ends with a U+002E(.)!"),
+            // Self::Ipv4TooManyParts => true,
+            // Self::Ipv4NonNumericPart => true,
+            // Self::Ipv4NonDecimalPart => false,
+            // Self::Ipv4OutOfRangePart => todo!(),
+            // Self::Ipv6Unclosed => true, 
+            // Self::Ipv6InvalidCompression => true,
+            // Self::Ipv6TooManyPieces => true,
+            // Self::Ipv6InvalidCodePoint => true,
+            // Self::Ipv6TooFewPieces => true,
+            // Self::Ipv4InIpv6TooManyPieces => true,
+            // Self::Ipv4InIpv6InvalidCodePoint => true,
+            // Self::Ipv4InIpv6OutOfRangePart => true,
+            // Self::Ipv4InIpv6TooFewParts => true,
+            _ => todo!(),
         }
     }
 }

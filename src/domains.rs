@@ -1,6 +1,11 @@
-use crate::errors::IDNAError;
+use crate::errors::{IDNAError, HostError};
 
 use idna::{Config, Errors};
+
+
+type IPv4 = u32;
+type Ipv4NumberResult = Result<(u8, bool), HostError>;
+
 
 fn unicode_to_ascii(
     domain: String,
@@ -53,4 +58,111 @@ pub fn domain_to_unicode(domain: String, be_strict: bool) -> String {
     } 
 
     return result;
+}
+
+fn parse_ipv4_number(input: &str) -> Ipv4NumberResult {
+    let mut input_chars = input.chars().collect::<Vec<char>>();
+
+    if input_chars.len() == 0 {
+        return Err(HostError::Ipv4Failure);
+    }
+
+    let mut validation_error: bool = false;
+    let mut radix: u32 = 10;
+
+    if input_chars.len() > 2 {
+        match input_chars[0..2] {
+            ['0', 'x'] | ['0', 'X'] => {
+                validation_error = true;
+                input_chars = input_chars[0..2].to_vec();
+                radix = 16;
+            }
+            ['0'] => {
+                validation_error = true;
+                input_chars = input_chars[0..1].to_vec();
+                radix = 8;
+            }
+
+            _ => {},
+        }
+    }
+
+    if input_chars.len() == 0 {
+        return Ok((0, true));
+    }
+
+    for point in input_chars {
+        if !point.is_digit(radix) {
+            return Err(HostError::Ipv4Failure);
+        }
+    }
+
+    let result: u8 = input
+        .parse::<u8>()
+        .expect("Number is not parsable!");
+
+    Ok((result, validation_error))
+}
+
+pub fn ipv4_parser(input: String) -> Result<IPv4, HostError> {
+    let mut parts: Vec<&str> = input.split(".").collect();
+
+    if let Some(last) = parts.last() {
+        if last.is_empty() {
+            println!("{}", HostError::Ipv4EmptyPart);
+            if parts.len() > 1 {
+                parts.pop();
+            }
+        }
+    }
+
+    if parts.len() > 4 {
+        println!("{}", HostError::Ipv4TooManyParts);
+        return Err(HostError::Ipv4TooManyParts);
+    }
+
+    let mut numbers: Vec<u32> = Vec::with_capacity(4);
+
+    for part in parts {
+        let result: Ipv4NumberResult  = parse_ipv4_number(part);
+
+
+        match result {
+            Err(_) => {
+                eprintln!("{}", HostError::Ipv4NonNumericPart);
+                return Err(HostError::Ipv4NonNumericPart);
+            },
+            Ok(num) => {
+                match num.1 {
+                    true => eprintln!("{}", HostError::Ipv4OutOfRangePart),
+                    false => numbers.push(num.0.into()),
+                }
+            }
+        }
+    }
+
+
+    for (idx, num) in numbers.iter().enumerate() {
+        if num > &255 {
+            eprintln!("{}", HostError::Ipv4OutOfRangePart);
+            if idx != numbers.len() - 1 {
+                return Err(HostError::Ipv4Failure);
+            } else {
+                if num > &256_u32.pow(5 - numbers.len() as u32) {
+                    return Err(HostError::Ipv4Failure);
+                }
+            }
+        }
+    }
+
+    let mut ipv4 = numbers.pop().unwrap();
+
+    let mut counter: u32 = 0;
+    for n in numbers {
+        ipv4 = ipv4 + (n * 256_u32.pow(3 - counter));
+        // TODO: Replace counter with enumerate's index.
+        counter += 1;
+    }
+
+    Ok(ipv4)
 }
