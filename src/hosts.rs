@@ -1,10 +1,8 @@
-use crate::types::hosts::*;
+use crate::types::types::*;
 use crate::errors::HostError;
 use crate::domains;
 
-
 use publicsuffix::{List, Psl};
-
 
 lazy_static::lazy_static! {
     static ref LIST: List = include_str!("../data/psl.dat").parse().unwrap();
@@ -102,7 +100,7 @@ pub fn host_serializer(host: Host) -> String {
             return result;
         },
         HostType::IPAddress(IPAddress::IPv6(address)) => {
-            let result = domains::ipv6_serializer(domains::Ipv6Pieces::from(domains::Ipv6Address(address)));
+            let result = domains::ipv6_serializer(Ipv6Pieces::from(Ipv6Address(address)));
             return format!("[{}]", result);
         },
     }
