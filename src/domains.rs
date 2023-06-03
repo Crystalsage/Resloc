@@ -2,11 +2,26 @@ use crate::errors::{IDNAError, HostError};
 
 use idna::{Config, Errors};
 
+pub type IPv4 = u32;
+pub type Ipv4NumberResult = Result<(u8, bool), HostError>;
 
-type IPv4 = u32;
-type Ipv4NumberResult = Result<(u8, bool), HostError>;
+pub struct Ipv6Address(pub u128);
+pub type Ipv6Pieces = [u16; 8];
 
-type Ipv6Pieces = [u16; 8];
+impl From<Ipv6Address> for Ipv6Pieces {
+    fn from(value: Ipv6Address) -> Self {
+        [
+            (value.0 >> (0 * 16) & 0xFFFF) as u16,
+            (value.0 >> (1 * 16) & 0xFFFF) as u16,
+            (value.0 >> (2 * 16) & 0xFFFF) as u16,
+            (value.0 >> (3 * 16) & 0xFFFF) as u16,
+            (value.0 >> (4 * 16) & 0xFFFF) as u16,
+            (value.0 >> (5 * 16) & 0xFFFF) as u16,
+            (value.0 >> (6 * 16) & 0xFFFF) as u16,
+            (value.0 >> (7 * 16) & 0xFFFF) as u16,
+        ]
+    }
+}
 
 fn unicode_to_ascii(
     domain: String,
@@ -187,4 +202,15 @@ pub fn ipv4_serializer(address: u32) -> String {
 
 pub fn ipv6_serializer(address: Ipv6Pieces) -> String {
     todo!();
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domains;
+
+    #[test]
+    fn test_u128_to_u16_array() {
+        let ipv6_address = domains::Ipv6Address(0xabcdefabcdefabcdefabcdefabcdefab);
+        assert_eq!(domains::Ipv6Pieces::from(ipv6_address), [0xefab, 0xabcd, 0xcdef, 0xefab, 0xabcd, 0xcdef, 0xefab, 0xabcd]);
+    }
 }
