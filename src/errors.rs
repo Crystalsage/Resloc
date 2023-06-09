@@ -1,6 +1,11 @@
 use std::fmt;
 
 #[derive(Debug)]
+pub enum ReslocError {
+    Failure,
+}
+
+#[derive(Debug)]
 pub enum IDNAError {
     DomainToAscii,
     DomainToUnicode,

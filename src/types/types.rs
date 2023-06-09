@@ -190,3 +190,25 @@ pub struct URL {
     hash: String,
     search_params: URLSearchParams,
 }
+
+pub enum UrlParseState {
+    SchemeStart,
+    Scheme,
+    NoScheme,
+    Authority,
+    Relative,
+    RelativeSlash,
+    SpecialAuthoritySlashes,
+    SpecialAuthorityIgnoreSlashes,
+    Host,
+    HostName,
+    Port,
+    File,
+    FileSlash,
+    FileHost,
+    PathStart,
+    Path,
+    OpaquePath,
+    Query,
+    Fragment,
+}
