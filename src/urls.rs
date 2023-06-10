@@ -1,7 +1,37 @@
+use std::default;
+
+use crate::types::types::{UrlParseState, Host, HostType};
 use crate::{errors::ReslocError, types::types::URL};
 use crate::hosts::host_serializer;
 
 impl URL {
+    fn default() -> Self {
+        Self { 
+            href: "".to_string(),
+            origin: "".to_string(),
+            scheme: "".to_string(),
+            username: "".to_string(),
+            password: "".to_string(),
+            fragment: Some("".to_string()),
+            query: Some("".to_string()),
+            host: Some(Host::new("".to_string(), HostType::Empty)),
+            hostname: "".to_string(),
+            port: Some("".to_string()),
+            path: Vec::new(),
+            search: "".to_string(),
+            hash: "".to_string(),
+        }
+    }
+
+    fn new(input: String, base: Option<String>, state_override: Option<UrlParseState>) -> Self {
+        // TODO: What does the optional URL do? 
+        let output: Result<URL, ReslocError> = basic_url_parser(input, base, None, state_override);
+        match output {
+            Ok(_) => output.unwrap(),
+            Err(_) => panic!("Basic URL parser failed!"),
+        }
+    }
+
     fn equals(self: &Self, other: &Self, exclude_fragment: Option<bool>) -> bool {
         let serialized_self = self.serialize(exclude_fragment);
         let serialized_other = other.serialize(exclude_fragment);
@@ -80,20 +110,31 @@ impl URL {
 }
 
 
-pub fn api_url_parser(url: String, base: Option<String>) -> Result<String, ReslocError> {
-    let parsed_base: Result<String, ReslocError>;
+pub fn basic_url_parser(
+    input: String, 
+    base: Option<String>, 
+    url: Option<URL>, 
+    state_override: Option<UrlParseState>) -> Result<URL, ReslocError> {
 
-    if base.is_some() {
-        parsed_base = basic_url_parser(base.unwrap(), None, None);
-        if parsed_base.is_err() {
-            return parsed_base;
-        }
+    if url.is_none() {
+        let url = URL::default();
+        let input = input.trim();
     }
 
-    return basic_url_parser(url, None, None);
-}
+    let mut input = input.replace("\t", "");
+    input = input.replace("\n", "");
 
+    let state: UrlParseState = match state_override {
+        Some(_) => state_override.unwrap(),
+        None => UrlParseState::SchemeStart
+    };
 
-pub fn basic_url_parser(input: String, base: Option<String>, url: Option<URL>) -> Result<String, ReslocError> {
-    Ok(("ABCDEF".to_string()))
+    let buffer: String = String::new();
+    let at_sign_seen: bool = false;
+    let inside_brackets: bool = false;
+    let password_token_seen: bool = false;
+
+    todo!("Implement state switching");
+
+    return Ok(url.unwrap());
 }
