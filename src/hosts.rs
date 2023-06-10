@@ -92,9 +92,9 @@ pub fn host_parser(input: &str, is_not_special: bool) -> Result<Host, HostError>
 }
 
 
-pub fn host_serializer(host: Host) -> String {
+pub fn host_serializer(host: &Host) -> String {
     match host.host_type {
-        HostType::Empty | HostType::Opaque | HostType::Domain => host.value,
+        HostType::Empty | HostType::Opaque | HostType::Domain => host.value.to_owned(),
         HostType::IPAddress(IPAddress::IPv4(address)) => {
             let result = domains::ipv4_serializer(address);
             return result;

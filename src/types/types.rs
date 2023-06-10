@@ -177,18 +177,19 @@ impl URLSearchParams {
 }
 
 pub struct URL {
-    href: String,
-    origin: String,
-    protocol: String,
-    username: String,
-    password: String,
-    host: String,
-    hostname: String,
-    port: String,
-    pathname: String,
-    search: String,
-    hash: String,
-    search_params: URLSearchParams,
+    pub href: String,
+    pub origin: String,
+    pub scheme: String,
+    pub username: String,
+    pub password: String,
+    pub fragment: Option<String>,
+    pub query: Option<String>,
+    pub host: Option<Host>,
+    pub hostname: String,
+    pub port: Option<String>,
+    pub path: Vec<String>,
+    pub search: String,
+    pub hash: String,
 }
 
 pub enum UrlParseState {
