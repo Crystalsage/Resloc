@@ -93,7 +93,7 @@ impl fmt::Display for HostError {
 }
 
 
-
+#[derive(Debug)]
 pub enum UrlError {
     InvalidUrlUnit,
     SSMissingFollowingSolidus,
@@ -106,6 +106,16 @@ pub enum UrlError {
     FileInvalidWdl,
     FileInvalidWdlHost,
 }
+
+impl std::fmt::Display for UrlError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SSMissingFollowingSolidus => write!(f, "Special scheme missing following solidus!"),
+            _ => todo!(),
+        }
+    }
+}
+
 
 impl UrlError {
     fn should_fail(self: Self) -> bool {
