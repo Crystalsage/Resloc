@@ -381,6 +381,43 @@ pub fn basic_url_parser(
                     eprintln!("{}", UrlError::SSMissingFollowingSolidus);
                 }
             }
+            UrlParseState::Authority => {
+                if c == '@' {
+                    eprintln!("{}", UrlError::InvalidCredentials);
+
+                    if at_sign_seen {
+                        buffer += "%40";
+                    }
+
+                    at_sign_seen = true;
+                    for bc in buffer.chars() {
+                        if bc == ':' && password_token_seen == false {
+                            password_token_seen = true;
+                            // TODO: Is this continue correct? 
+                            continue;
+                        } 
+
+                        if password_token_seen {
+                            url.password += &bc.to_string();
+                        } else {
+                            url.username += &bc.to_string();
+                        }
+                    }
+
+                    buffer = "".to_string();
+                }
+
+                if (c == '/' || c == '?' || c == '#') || (url.is_special() && c == '\\') {
+                    if at_sign_seen && buffer.is_empty() {
+                        eprintln!("{}", UrlError::InvalidCredentials);
+                        return Err(ReslocError::Failure);
+                    } else {
+                        pointer -= buffer.len() + 1;
+                        buffer = "".to_string();
+                        state = UrlParseState::Host;
+                    }
+                }
+            }
             _ => break,
         }
     }

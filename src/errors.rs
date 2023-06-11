@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, write};
 
 #[derive(Debug)]
 pub enum ReslocError {
@@ -111,6 +111,7 @@ impl std::fmt::Display for UrlError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SSMissingFollowingSolidus => write!(f, "Special scheme missing following solidus!"),
+            Self::InvalidCredentials => write!(f, "Invalid credentials!"),
             _ => todo!(),
         }
     }
