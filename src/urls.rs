@@ -39,7 +39,7 @@ impl URL {
         }
     }
 
-    fn new(input: String, base: Option<String>, state_override: Option<UrlParseState>) -> Self {
+    fn new(input: String, base: Option<URL>, state_override: Option<UrlParseState>) -> Self {
         // TODO: What does the optional URL do? 
         let output: Result<URL, ReslocError> = basic_url_parser(input, base, None, state_override);
         match output {
@@ -74,6 +74,22 @@ impl URL {
 
     fn is_special_scheme(scheme: &String) -> bool {
         return SPECIAL_SCHEMES.contains_key(scheme.as_str());
+    }
+
+    fn is_normalized_windows_letter(path: String) -> bool { 
+        let path_chars: Vec<char> = path.chars().collect();
+        return path_chars[0].is_ascii_alphabetic() && path_chars[1] == ':';
+    }
+
+    fn shorten_path(self: &mut Self) {
+        assert_eq!(self.has_opaque_path(), false);
+
+        let path = self.path;
+        if self.scheme == "file" && path.len() == 1 && URL::is_normalized_windows_letter(path[0]) {
+            return;
+        }
+
+        self.path.pop();
     }
 
     fn serialize_path(self: &Self) -> String {
@@ -156,6 +172,9 @@ pub fn basic_url_parser(
     let has_state_override: bool = state_override.is_some();
     let mut state: UrlParseState = state_override.unwrap_or(UrlParseState::SchemeStart);
 
+    let has_base: bool = base.is_some();
+    let base: URL = base.unwrap();
+
     let at_sign_seen: bool = false;
     let inside_brackets: bool = false;
     let password_token_seen: bool = false;
@@ -165,6 +184,11 @@ pub fn basic_url_parser(
     let mut pointer: usize = 0;
 
     loop {
+        if pointer == input.len() {
+            break;
+        }
+        pointer += 1;
+
         let mut c: char = input[pointer];
 
         match state {
@@ -196,7 +220,7 @@ pub fn basic_url_parser(
                             return Err(ReslocError::Failure);
                         }
 
-                        if url.scheme == "file" && url.host.unwrap().value.is_empty() {
+                        if url.scheme == "file" && url.host.as_ref().unwrap().value.is_empty() {
                             return Err(ReslocError::Failure);
                         }
                     }
@@ -221,7 +245,7 @@ pub fn basic_url_parser(
                         state = UrlParseState::PathOrAuthority;
                         pointer += 1;
                     } else if url.is_special() {
-                        if let Some(b) = base {
+                        if let Some(ref b) = base {
                             if b.scheme == url.scheme {
                                 assert_eq!(b.is_special(), true);
                                 state = UrlParseState::SpecialRelativeOrAuthority;
@@ -246,16 +270,16 @@ pub fn basic_url_parser(
                     None => {
                         eprintln!("{}", UrlError::MissingSchemeNonRelativeUrl);
                         return Err(ReslocError::Failure);
-                    } 
-                    Some(b) => {
+                    }
+                    Some(ref b) => {
                         if b.has_opaque_path() {
                             if c != '#' {
                                 eprintln!("{}", UrlError::MissingSchemeNonRelativeUrl);
                                 return Err(ReslocError::Failure);
                             } else {
-                                url.scheme = b.scheme;
-                                url.path = b.path;
-                                url.query = b.query;
+                                url.scheme = b.scheme.clone();
+                                url.path = b.path.clone();
+                                url.query = b.query.clone();
                                 url.fragment = Some("".to_string());
                                 state = UrlParseState::Fragment;
                             }
@@ -267,6 +291,94 @@ pub fn basic_url_parser(
                             pointer -= 1;
                         }
                     }
+                }
+            }
+            UrlParseState::SpecialRelativeOrAuthority => {
+                if c == '/' && input[pointer+1..].starts_with(&['/']) {
+                    state = UrlParseState::SpecialAuthorityIgnoreSlashes;
+                    pointer += 1;
+                } else {
+                    eprintln!("{}", UrlError::SSMissingFollowingSolidus);
+                    state = UrlParseState::Relative;
+                    pointer -= 1;
+                }
+            }
+            UrlParseState::PathOrAuthority => {
+                if c == '/' {
+                    state = UrlParseState::Authority;
+                } else {
+                    state = UrlParseState::Path;
+                    pointer -= 1;
+                }
+            }
+            UrlParseState::Relative => {
+                assert_eq!(base.scheme, "file".to_string());
+                url.scheme = base.scheme;
+
+                if c == '/' {
+                    state = UrlParseState::RelativeSlash;
+                } else if url.is_special() && c == '\\' {
+                    eprintln!("{}", UrlError::InvalidReverseSolidus);
+                    state = UrlParseState::RelativeSlash;
+                } else {
+                    url.username = base.username;
+                    url.password = base.password;
+                    url.host = base.host;
+                    url.port = base.port;
+                    url.path = base.path;
+                    url.query = base.query;
+
+                    match c {
+                        '?' => {
+                            url.query = Some("".to_string());
+                            state = UrlParseState::Query;
+                        }
+                        '#' => {
+                            url.fragment = Some("".to_string());
+                            state = UrlParseState::Fragment;
+                        }
+                        _ => {
+                            url.query = None;
+                            url.shorten_path();
+                            state = UrlParseState::Path;
+                            pointer -= 1;
+                        }
+                    }
+                }
+            }
+            UrlParseState::RelativeSlash => {
+                if url.is_special() && c == '/' || c == '\\' {
+                    if c == '\\' {
+                        eprintln!("{}", UrlError::InvalidReverseSolidus);
+                        state = UrlParseState::SpecialAuthorityIgnoreSlashes;
+                    }
+                } else if c == '/' {
+                    state = UrlParseState::Authority;
+                } else {
+                    url.username = base.username;
+                    url.password = base.password;
+                    url.host = base.host;
+                    url.port = base.port;
+                    state = UrlParseState::Path;
+                    pointer -= 1;
+                }
+            }
+            UrlParseState::SpecialAuthoritySlashes => {
+                if c == '/' && input[pointer+1..].starts_with(&['/']) {
+                    state = UrlParseState::SpecialAuthorityIgnoreSlashes;
+                    pointer += 1;
+                } else {
+                    eprintln!("{}", UrlError::SSMissingFollowingSolidus);
+                    state = UrlParseState::SpecialAuthorityIgnoreSlashes;
+                    pointer -= 1;
+                }
+            }
+            UrlParseState::SpecialAuthorityIgnoreSlashes => {
+                if c != '/' || c != '\\' {
+                    state = UrlParseState::Authority;
+                    pointer -= 1;
+                } else {
+                    eprintln!("{}", UrlError::SSMissingFollowingSolidus);
                 }
             }
             _ => break,
