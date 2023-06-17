@@ -92,6 +92,12 @@ impl URL {
         return SPECIAL_SCHEMES.contains_key(scheme.as_str());
     }
 
+    fn starts_with_windows_drive_letter(path: &String) -> bool {
+        let third_code_point = path.chars().nth(2).unwrap();
+
+        path.len() >= 2 && URL::is_windows_drive_letter(path) && (path.len() == 2 || third_code_point == '/' || third_code_point == '\\' || third_code_point == '?' || third_code_point == '#')
+    }
+
     fn is_windows_drive_letter(path: &String) -> bool {
         let path_chars: Vec<char> = path.chars().collect();
         return path_chars[0].is_ascii_alphabetic() && (path_chars[1] == ':' || path_chars[1] == '|');
@@ -147,7 +153,7 @@ impl URL {
                 output += &host_serializer(self.host.as_ref().unwrap());
                 if self.port.is_some() {
                     output += ":";
-                    output += &self.port.as_ref().unwrap();
+                    output += &self.port.as_ref().unwrap().to_string();
                 }
             },
             None => { 
@@ -191,13 +197,14 @@ pub fn basic_url_parser(
     input = input.replace("\n", "");
 
     let has_state_override: bool = state_override.is_some();
+    let original_state_override: Option<UrlParseState> = state_override.clone();
     let mut state: UrlParseState = state_override.unwrap_or(UrlParseState::SchemeStart);
 
     let has_base: bool = base.is_some();
     let base: URL = base.unwrap();
 
     let mut at_sign_seen: bool = false;
-    let inside_brackets: bool = false;
+    let mut inside_brackets: bool = false;
     let mut password_token_seen: bool = false;
 
     let mut buffer: String = String::new();
@@ -451,7 +458,7 @@ pub fn basic_url_parser(
                         return Err(ReslocError::Failure);
                     }
 
-                    if has_state_override && matches!(state_override, Some(UrlParseState::HostName)) {
+                    if has_state_override && matches!(original_state_override, Some(UrlParseState::HostName)) {
                         // TODO: Continue or return?
                         continue;
                     }
@@ -492,6 +499,7 @@ pub fn basic_url_parser(
                     inside_brackets = match c {
                         '[' => true,
                         ']' => false,
+                        _ => inside_brackets
                     };
 
                     buffer += &c.to_string();
@@ -550,7 +558,7 @@ pub fn basic_url_parser(
                             return Err(ReslocError::Failure);
                         }
 
-                        let host = host.unwrap();
+                        let mut host = host.unwrap();
 
                         if host.value == "localhost" {
                             host.value = "".to_string();
@@ -569,6 +577,66 @@ pub fn basic_url_parser(
                     buffer += &c.to_string();
                 }
             }
+            UrlParseState::FileSlash => {
+                if c == '/' || c == '\\' {
+                    if c == '\\' {
+                        eprintln!("{}", UrlError::InvalidReverseSolidus);
+                    }
+                    state = UrlParseState::FileHost;
+                } else {
+                    if has_base && base.scheme == "file" {
+                        url.host = base.host.clone();
+                        if !URL::starts_with_windows_drive_letter(&input[pointer..].iter().collect::<String>()) && URL::is_normalized_windows_letter(&base.path[0]) {
+                            url.path.push(base.path[0].clone());
+                        }
+                    }
+
+                    state = UrlParseState::Path;
+                    pointer -= 1;
+                }
+            }
+
+            UrlParseState::FileHost => {
+                if c == '/' || c == '\\' || c == '?' || c == '#' {
+                    pointer -= 1;
+
+                    if !has_state_override && URL::is_windows_drive_letter(&buffer) {
+                        eprintln!("{}", UrlError::FileInvalidWdlHost);
+                        state = UrlParseState::Path;
+                    } else if buffer.is_empty() {
+                        url.host.as_mut().unwrap().value = "".to_string();
+                        if has_state_override {
+                            // TODO: C||R?
+                            continue;
+                        }
+
+                        state = UrlParseState::PathStart;
+                    } else {
+                        let host = host_parser(&buffer, false);
+                        if host.is_err() {
+                            return Err(ReslocError::Failure);
+                        }
+
+                        let mut host = host.unwrap();
+
+                        if host.value == "localhost" {
+                            host.value = "".to_string();
+                        }
+
+                        url.host = Some(host);
+
+                        if has_state_override {
+                            continue;
+                        }
+
+                        buffer = "".to_string();
+                        state = UrlParseState::Path;
+                    }
+                } else {
+                    buffer += &c.to_string();
+                }
+            }
+
             UrlParseState::PathStart => {
                 if url.is_special() {
                     if c == '\\'  {
@@ -590,6 +658,7 @@ pub fn basic_url_parser(
                             url.fragment = Some("".to_string());
                             state = UrlParseState::Fragment;
                         }
+                        _ => {}
                     }
                 } else if has_state_override && url.host.is_none() {
                     url.path.push("".to_string());
@@ -626,6 +695,7 @@ pub fn basic_url_parser(
                     match c {
                         '?' => { url.query = Some("".to_string()); state = UrlParseState::Query },
                         '#' => { url.fragment = Some("".to_string()); state = UrlParseState::Fragment },
+                        _ => {},
                     }
                 } else {
                     // TODO: Add Percent encoding
@@ -643,9 +713,24 @@ pub fn basic_url_parser(
                     buffer += &c.to_string();
                 }
             }
-            _ => break,
+            UrlParseState::Query => {
+                if !has_state_override && c == '#' {
+                    url.query = Some(buffer);
+                    buffer = "".to_string();
+                    if c == '#' {
+                        url.fragment = Some("".to_string());
+                        state = UrlParseState::Fragment;
+                    }
+                } else {
+                    buffer += &c.to_string();
+                }
+                
+            }
+            UrlParseState::Fragment => {
+                buffer += &c.to_string();
+            }
         }
     }
 
-    return Ok(URL::default());
+    return Ok(url);
 }

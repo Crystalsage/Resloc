@@ -195,6 +195,7 @@ pub struct URL {
     pub hash: String,
 }
 
+#[derive(Clone)]
 pub enum UrlParseState {
     SchemeStart,
     Scheme,
