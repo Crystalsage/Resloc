@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 
-use crate::errors::UrlError;
+use crate::errors::{UrlError, HostError};
 use crate::types::types::{UrlParseState, Host, HostType};
 use crate::{errors::ReslocError, types::types::URL};
-use crate::hosts::host_serializer;
+use crate::hosts::{host_serializer, host_parser};
 
 lazy_static! {
     static ref SPECIAL_SCHEMES: HashMap<&'static str, u16> = {
@@ -32,7 +32,7 @@ impl URL {
             query: Some("".to_string()),
             host: Some(Host::new("".to_string(), HostType::Empty)),
             hostname: "".to_string(),
-            port: Some("".to_string()),
+            port: Some(0_u16),
             path: Vec::new(),
             search: "".to_string(),
             hash: "".to_string(),
@@ -64,8 +64,16 @@ impl URL {
         todo!("Implement has_opaque_path");
     }
 
-    fn get_default_port(scheme: &String) -> Option<String> {
-        SPECIAL_SCHEMES.get(scheme.as_str()).map(|x| x.to_string())
+    fn get_default_port(scheme: &String) -> Option<u16> {
+        SPECIAL_SCHEMES.get(scheme.as_str()).cloned()
+    }
+
+    fn is_default_port(self: &Self, port: &u16) -> bool {
+        let def_port = URL::get_default_port(&self.scheme);
+        match def_port {
+            Some(p) => p == *port,
+            None => false
+        }
     }
 
     fn is_special(self: &Self) -> bool {
@@ -416,6 +424,97 @@ pub fn basic_url_parser(
                         buffer = "".to_string();
                         state = UrlParseState::Host;
                     }
+                }
+            }
+            UrlParseState::Host | UrlParseState::HostName => {
+                if has_state_override && url.scheme == "file" {
+                    pointer -= 1;
+                    state = UrlParseState::FileHost;
+                }
+
+                if c == ':' && inside_brackets == false {
+                    if buffer.is_empty() {
+                        eprintln!("{}", UrlError::HostMissing);
+                        return Err(ReslocError::Failure);
+                    }
+
+                    if has_state_override && matches!(state_override, Some(UrlParseState::HostName)) {
+                        // TODO: Continue or return?
+                        continue;
+                    }
+
+                    let host: Result<Host, HostError> = host_parser(&buffer, false);
+                    if host.is_err() {
+                        return Err(ReslocError::Failure);
+                    }
+
+                    url.host = Some(host.unwrap());
+                    buffer = "".to_string();
+                    state = UrlParseState::Port;
+                } else if (c == '/' || c == '?' || c == '#')  || (url.is_special() && c == '\\') {
+                    pointer -= 1;
+
+                    if url.is_special() && buffer.is_empty()  {
+                        eprintln!("{}", UrlError::HostMissing);
+                        return Err(ReslocError::Failure);
+                    } 
+
+                    if has_state_override && buffer.is_empty() && (url.includes_credentials() || url.port.is_some()) {
+                        // TODO: Continue or return?
+                        continue;
+                    }
+
+                    let host: Result<Host, HostError> = host_parser(&buffer, false);
+                    if host.is_err() {
+                        return Err(ReslocError::Failure);
+                    }
+
+                    url.host = Some(host.unwrap());
+                    buffer = "".to_string();
+                    state = UrlParseState::PathStart;
+                    if has_state_override {
+                        continue;
+                    }
+                } else {
+                    inside_brackets = match c {
+                        '[' => true,
+                        ']' => false,
+                    };
+
+                    buffer += &c.to_string();
+                }
+            }
+            UrlParseState::Port => { 
+                if c.is_ascii_digit() {
+                    buffer += &c.to_string();
+                }
+
+                if ['/', '?', '#'].contains(&c) || (url.is_special() && c == '\\') && has_state_override {
+                    if !buffer.is_empty() {
+                        let port: u16 = buffer.parse().unwrap();
+                        if port > u16::MAX - 1 {
+                            eprintln!("{}", UrlError::PortOutOfRange);
+                            return Err(ReslocError::Failure);
+                        }
+
+                        url.port = match url.is_default_port(&port) {
+                            true => None,
+                            false => Some(port),
+                        };
+
+                        buffer = "".to_string();
+                    }
+
+                    if has_state_override {
+                        // TODO: Continue or return?
+                        continue;
+                    }
+
+                    state = UrlParseState::PathStart;
+                    pointer -= 1;
+                } else {
+                    eprintln!("{}", UrlError::PortInvalid);
+                    return Err(ReslocError::Failure);
                 }
             }
             _ => break,

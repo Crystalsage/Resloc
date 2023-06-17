@@ -189,7 +189,7 @@ pub struct URL {
     pub query: Option<String>,
     pub host: Option<Host>,
     pub hostname: String,
-    pub port: Option<String>,
+    pub port: Option<u16>,
     pub path: Vec<String>,
     pub search: String,
     pub hash: String,

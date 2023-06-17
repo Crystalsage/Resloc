@@ -5,7 +5,7 @@ use crate::types::types::{Ipv4NumberResult, Ipv6Pieces, IPv4};
 
 use idna::{Config, Errors};
 
-fn unicode_to_ascii(
+pub fn unicode_to_ascii(
     domain: String,
     check_hyphens: bool,
     use_std3_ascii_rules: bool,
@@ -58,7 +58,7 @@ pub fn domain_to_unicode(domain: String, be_strict: bool) -> String {
     return result;
 }
 
-fn parse_ipv4_number(input: &str) -> Ipv4NumberResult {
+pub fn parse_ipv4_number(input: &str) -> Ipv4NumberResult {
     let mut input_chars = input.chars().collect::<Vec<char>>();
 
     if input_chars.len() == 0 {
@@ -186,22 +186,66 @@ fn get_first_longest_sequence(address: &Ipv6Pieces) -> Option<usize> {
     let mut sequence_map: HashMap<usize, usize> = HashMap::new();
 
     let mut count: usize = 0;
+    let mut s_idx: usize = 0;
 
     for (idx, piece) in address.iter().enumerate() {
         if *piece == 0 {
+            if count == 0 {
+                s_idx = idx;
+            }
             count += 1;
         } else {
-            sequence_map.insert(count, idx);
+            sequence_map.insert(count, s_idx);
             count = 0;
         }
     }
 
-    sequence_map.get(sequence_map.keys().max().unwrap()).cloned()
+    // In case if all the elements are 0, then we need to 'flush' it.
+    sequence_map.insert(count, s_idx);
+
+    if let Some(x) = sequence_map.keys().max() {
+        if *x == 1 || *x == 0 {
+            None
+        } else {
+            sequence_map.get(x).cloned()
+        }
+    } else {
+        panic!("Failed to get map entry!");
+    }
 }
 
-
 pub fn ipv6_serializer(address: Ipv6Pieces) -> String {
-    todo!();
+    let mut output: String =  String::new();
+    let compress: Option<usize> = get_first_longest_sequence(&address);
+    let mut ignore0: bool = false;
+
+    for (idx, piece) in address.iter().enumerate() {
+        if ignore0 && *piece == 0 {
+            continue;
+        }
+
+        if ignore0 == true {
+            ignore0 = false;
+        }
+
+        if Some(idx) == compress {
+            let seperator: &str = match idx { 
+                0 => "::",
+                _ => ":",
+            };
+
+            output += seperator;
+            ignore0 = true;
+            continue;
+        }
+
+        output += &format!("{piece:x}").to_string();
+        if idx != 7 {
+            output += ":";
+        }
+    }
+
+    output
 }
 
 
@@ -222,6 +266,15 @@ mod tests {
         assert_eq!(ipv4_serializer(ipv4_address), "255.255.255.255".to_string());
     }
 
+    #[test]
+    fn test_ipv6_serializer() {
+        let min_ipv6_address: u128 = 0;
+        let max_ipv6_address: u128 = u128::MAX;
+        assert_eq!(ipv6_serializer(Ipv6Address(min_ipv6_address).into()), "::");
+        assert_eq!(ipv6_serializer(Ipv6Address(max_ipv6_address).into()), "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff");
+    }
+
+    #[test]
     fn test_longest_sequence() {
         assert_eq!(get_first_longest_sequence(&[0x0,0xf,0x0,0x0,0xf,0xf,0xf,0xf]), Some(2));
     }
