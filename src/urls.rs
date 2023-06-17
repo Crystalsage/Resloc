@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 
-use crate::errors::{HostError, UrlError};
+use crate::errors::UrlError;
 use crate::types::types::{UrlParseState, Host, HostType};
 use crate::{errors::ReslocError, types::types::URL};
 use crate::hosts::host_serializer;
@@ -76,7 +76,7 @@ impl URL {
         return SPECIAL_SCHEMES.contains_key(scheme.as_str());
     }
 
-    fn is_normalized_windows_letter(path: String) -> bool { 
+    fn is_normalized_windows_letter(path: &String) -> bool { 
         let path_chars: Vec<char> = path.chars().collect();
         return path_chars[0].is_ascii_alphabetic() && path_chars[1] == ':';
     }
@@ -84,8 +84,8 @@ impl URL {
     fn shorten_path(self: &mut Self) {
         assert_eq!(self.has_opaque_path(), false);
 
-        let path = self.path;
-        if self.scheme == "file" && path.len() == 1 && URL::is_normalized_windows_letter(path[0]) {
+        let path = &self.path;
+        if self.scheme == "file" && path.len() == 1 && URL::is_normalized_windows_letter(&path[0]) {
             return;
         }
 
@@ -175,12 +175,12 @@ pub fn basic_url_parser(
     let has_base: bool = base.is_some();
     let base: URL = base.unwrap();
 
-    let at_sign_seen: bool = false;
+    let mut at_sign_seen: bool = false;
     let inside_brackets: bool = false;
-    let password_token_seen: bool = false;
+    let mut password_token_seen: bool = false;
 
     let mut buffer: String = String::new();
-    let mut input: Vec<char> = input.chars().collect();
+    let input: Vec<char> = input.chars().collect();
     let mut pointer: usize = 0;
 
     loop {
@@ -189,7 +189,7 @@ pub fn basic_url_parser(
         }
         pointer += 1;
 
-        let mut c: char = input[pointer];
+        let c: char = input[pointer];
 
         match state {
             UrlParseState::SchemeStart => {
@@ -216,7 +216,7 @@ pub fn basic_url_parser(
                             return Err(ReslocError::Failure);
                         }
 
-                        if ((url.includes_credentials() || url.port.is_some()) && buffer == "file") {
+                        if (url.includes_credentials() || url.port.is_some()) && buffer == "file" {
                             return Err(ReslocError::Failure);
                         }
 
@@ -245,9 +245,9 @@ pub fn basic_url_parser(
                         state = UrlParseState::PathOrAuthority;
                         pointer += 1;
                     } else if url.is_special() {
-                        if let Some(ref b) = base {
-                            if b.scheme == url.scheme {
-                                assert_eq!(b.is_special(), true);
+                        if has_base {
+                            if base.scheme == url.scheme {
+                                assert_eq!(base.is_special(), true);
                                 state = UrlParseState::SpecialRelativeOrAuthority;
                             }
                         } else {
@@ -266,24 +266,24 @@ pub fn basic_url_parser(
                 }
             }
             UrlParseState::NoScheme => {
-                match base {
-                    None => {
+                match has_base {
+                    false => {
                         eprintln!("{}", UrlError::MissingSchemeNonRelativeUrl);
                         return Err(ReslocError::Failure);
                     }
-                    Some(ref b) => {
-                        if b.has_opaque_path() {
+                    true => {
+                        if base.has_opaque_path() {
                             if c != '#' {
                                 eprintln!("{}", UrlError::MissingSchemeNonRelativeUrl);
                                 return Err(ReslocError::Failure);
                             } else {
-                                url.scheme = b.scheme.clone();
-                                url.path = b.path.clone();
-                                url.query = b.query.clone();
+                                url.scheme = base.scheme.clone();
+                                url.path = base.path.clone();
+                                url.query = base.query.clone();
                                 url.fragment = Some("".to_string());
                                 state = UrlParseState::Fragment;
                             }
-                        } else if b.scheme != "file" {
+                        } else if base.scheme != "file" {
                             state = UrlParseState::Relative;
                             pointer -= 1;
                         } else {
@@ -313,7 +313,7 @@ pub fn basic_url_parser(
             }
             UrlParseState::Relative => {
                 assert_eq!(base.scheme, "file".to_string());
-                url.scheme = base.scheme;
+                url.scheme = base.scheme.clone();
 
                 if c == '/' {
                     state = UrlParseState::RelativeSlash;
@@ -321,12 +321,12 @@ pub fn basic_url_parser(
                     eprintln!("{}", UrlError::InvalidReverseSolidus);
                     state = UrlParseState::RelativeSlash;
                 } else {
-                    url.username = base.username;
-                    url.password = base.password;
-                    url.host = base.host;
-                    url.port = base.port;
-                    url.path = base.path;
-                    url.query = base.query;
+                    url.username = base.username.clone();
+                    url.password = base.password.clone();
+                    url.host = base.host.clone();
+                    url.port = base.port.clone();
+                    url.path = base.path.clone();
+                    url.query = base.query.clone();
 
                     match c {
                         '?' => {
@@ -355,10 +355,10 @@ pub fn basic_url_parser(
                 } else if c == '/' {
                     state = UrlParseState::Authority;
                 } else {
-                    url.username = base.username;
-                    url.password = base.password;
-                    url.host = base.host;
-                    url.port = base.port;
+                    url.username = base.username.clone();
+                    url.password = base.password.clone();
+                    url.host = base.host.clone();
+                    url.port = base.port.clone();
                     state = UrlParseState::Path;
                     pointer -= 1;
                 }

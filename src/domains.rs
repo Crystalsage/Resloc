@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::errors::{IDNAError, HostError};
 use crate::types::types::{Ipv4NumberResult, Ipv6Pieces, IPv4};
 
@@ -180,6 +182,24 @@ pub fn ipv4_serializer(address: u32) -> String {
     return output;
 }
 
+fn get_first_longest_sequence(address: &Ipv6Pieces) -> Option<usize> {
+    let mut sequence_map: HashMap<usize, usize> = HashMap::new();
+
+    let mut count: usize = 0;
+
+    for (idx, piece) in address.iter().enumerate() {
+        if *piece == 0 {
+            count += 1;
+        } else {
+            sequence_map.insert(count, idx);
+            count = 0;
+        }
+    }
+
+    sequence_map.get(sequence_map.keys().max().unwrap()).cloned()
+}
+
+
 pub fn ipv6_serializer(address: Ipv6Pieces) -> String {
     todo!();
 }
@@ -187,7 +207,8 @@ pub fn ipv6_serializer(address: Ipv6Pieces) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::domains::{self, ipv4_serializer};
+    use super::*;
+    use crate::types::types::Ipv6Address;
 
     #[test]
     fn test_u128_to_u16_array() {
@@ -199,5 +220,9 @@ mod tests {
     fn test_ipv4_serializer() {
         let ipv4_address = u32::max_value();
         assert_eq!(ipv4_serializer(ipv4_address), "255.255.255.255".to_string());
+    }
+
+    fn test_longest_sequence() {
+        assert_eq!(get_first_longest_sequence(&[0x0,0xf,0x0,0x0,0xf,0xf,0xf,0xf]), Some(2));
     }
 }

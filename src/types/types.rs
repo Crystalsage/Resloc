@@ -2,11 +2,13 @@ use std::{collections::HashMap};
 
 use crate::errors::HostError;
 
+#[derive(Clone)]
 pub enum IPAddress {
     IPv4(u32),
     IPv6(u128),
 }
 
+#[derive(Clone)]
 pub enum HostType {
     Domain,
     IPAddress(IPAddress),
@@ -14,6 +16,7 @@ pub enum HostType {
     Empty
 }
 
+#[derive(Clone)]
 pub struct Host {
     pub value: String,
     pub host_type: HostType,
