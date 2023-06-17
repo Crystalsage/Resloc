@@ -64,6 +64,14 @@ impl URL {
         todo!("Implement has_opaque_path");
     }
 
+    fn is_single_dot_path_segment(path: &String) -> bool {
+        path == "." || path == "%2e"
+    }
+
+    fn is_double_dot_path_segment(path: &String) -> bool  {
+        path == ".." || path == ".%2e" || path == "%2e." || path == "%2e%2e"
+    }
+
     fn get_default_port(scheme: &String) -> Option<u16> {
         SPECIAL_SCHEMES.get(scheme.as_str()).cloned()
     }
@@ -82,6 +90,11 @@ impl URL {
 
     fn is_special_scheme(scheme: &String) -> bool {
         return SPECIAL_SCHEMES.contains_key(scheme.as_str());
+    }
+
+    fn is_windows_drive_letter(path: &String) -> bool {
+        let path_chars: Vec<char> = path.chars().collect();
+        return path_chars[0].is_ascii_alphabetic() && (path_chars[1] == ':' || path_chars[1] == '|');
     }
 
     fn is_normalized_windows_letter(path: &String) -> bool { 
@@ -515,6 +528,119 @@ pub fn basic_url_parser(
                 } else {
                     eprintln!("{}", UrlError::PortInvalid);
                     return Err(ReslocError::Failure);
+                }
+            }
+            UrlParseState::File => {
+                if ['/', '\\', '?', '#'].contains(&c) {
+                    pointer -= 1;
+
+                    if !has_state_override && URL::is_windows_drive_letter(&buffer) {
+                        eprintln!("{}", UrlError::FileInvalidWdlHost);
+                        state = UrlParseState::Path;
+                    } else if buffer.is_empty() {
+                        url.host.as_mut().unwrap().value = "".to_string();
+                        if has_state_override {
+                            // TODO: Continue or return?
+                            continue;
+                        }
+                        state = UrlParseState::PathStart;
+                    } else {
+                        let host = host_parser(&buffer, false);
+                        if host.is_err() {
+                            return Err(ReslocError::Failure);
+                        }
+
+                        let host = host.unwrap();
+
+                        if host.value == "localhost" {
+                            host.value = "".to_string();
+                        }
+
+                        url.host = Some(host);
+                        if has_state_override {
+                            // TODO: C||R?
+                            continue;
+                        }
+
+                        buffer = "".to_string();
+                        state = UrlParseState::PathStart;
+                    }
+                } else {
+                    buffer += &c.to_string();
+                }
+            }
+            UrlParseState::PathStart => {
+                if url.is_special() {
+                    if c == '\\'  {
+                        eprintln!("{}", UrlError::InvalidReverseSolidus);
+                    }
+                    state = UrlParseState::Path;
+                    if c != '\\' || c != '/' {
+                        pointer -= 1;
+                    }
+                }
+
+                if !has_state_override {
+                    match c {
+                        '?' => {
+                            url.query = Some("".to_string());
+                            state = UrlParseState::Query;
+                        }
+                        '#' => {
+                            url.fragment = Some("".to_string());
+                            state = UrlParseState::Fragment;
+                        }
+                    }
+                } else if has_state_override && url.host.is_none() {
+                    url.path.push("".to_string());
+                } else {
+                    state = UrlParseState::Path;
+                    if c != '/' {
+                        pointer -= 1;
+                    }
+                }
+            }
+            UrlParseState::Path => {
+                if c == '/' || (url.is_special() && c == '\\') || (!has_state_override && (['?', '#'].contains(&c))) {
+                    if url.is_special() && c == '\\' {
+                        eprintln!("{}", UrlError::InvalidReverseSolidus);
+                    }
+
+                    let is_single_dot_path = URL::is_single_dot_path_segment(&buffer);
+
+                    if URL::is_double_dot_path_segment(&buffer) {
+                        url.shorten_path();
+                        if c != '/' && !url.is_special() && c == '\\' {
+                            url.path.push("".to_string());
+                        }
+                    } else if is_single_dot_path && c != '/' && !url.is_special() && c == '/' {
+                            url.path.push("".to_string());
+                    } else {
+                        if url.scheme == "file" && url.path.is_empty() && URL::is_windows_drive_letter(&buffer) {
+                            buffer.replace_range(1..2, ":");
+                        }
+                        url.path.push(buffer);
+                    }
+
+                    buffer = "".to_string();
+                    match c {
+                        '?' => { url.query = Some("".to_string()); state = UrlParseState::Query },
+                        '#' => { url.fragment = Some("".to_string()); state = UrlParseState::Fragment },
+                    }
+                } else {
+                    // TODO: Add Percent encoding
+                    buffer += &c.to_string();
+                }
+            }
+            UrlParseState::OpaquePath => {
+                if c == '?' {
+                    url.query = Some("".to_string());
+                    state = UrlParseState::Query;
+                } else if c == '#' {
+                    url.fragment = Some("".to_string());
+                    state = UrlParseState::Fragment;
+                } else {
+                    buffer += &c.to_string();
                 }
             }
             _ => break,
